@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>3D Interior Designer — Demo</title>
+  <style>
+    :root{--accent:#4c63ff;--bg:#f3f6ff}
+    html,body{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,system-ui,Arial}
+    body{display:flex;flex-direction:column;background:linear-gradient(180deg,var(--bg),#ffffff)}
+    header{height:64px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;gap:12px}
+    header .brand{display:flex;align-items:center;gap:12px}
+    .logo{width:44px;height:44px;border-radius:10px;background:var(--accent);display:flex;align-items:center;justify-content:center;color:white;font-weight:700;box-shadow:0 6px 18px rgba(76,99,255,0.18)}
+    h1{font-size:16px;margin:0;color:#0b1a2b}
+    p.muted{margin:0;color:#5b6b80;font-size:13px}
+
+    main{flex:1;display:flex;overflow:hidden}
+    /* 3D canvas area */
+    #canvas-wrap{flex:1;position:relative}
+    canvas{width:100%;height:100%;display:block}
+
+    /* Panel */
+    .panel{width:340px;padding:18px;background:rgba(255,255,255,0.95);box-shadow: -20px 20px 60px rgba(12,20,40,0.06);backdrop-filter: blur(6px);overflow:auto}
+    .panel h2{margin:0 0 12px 0;font-size:16px;color:#0b1a2b}
+    .control{margin-bottom:12px}
+    .control label{display:block;font-size:13px;color:#3b4b63;margin-bottom:8px}
+    .row{display:flex;gap:8px}
+    input[type="color"]{height:40px;border-radius:8px;border:1px solid #e6eef9;padding:4px}
+    .btn{display:inline-block;padding:10px 14px;border-radius:10px;border:none;background:var(--accent);color:white;cursor:pointer;font-weight:600}
+    .btn.secondary{background:#eef2ff;color:var(--accent);border:1px solid rgba(76,99,255,0.12)}
+    .small{font-size:13px;padding:8px 10px}
+
+    footer{height:46px;display:flex;align-items:center;justify-content:center;color:#6b7a90;font-size:13px}
+
+    /* responsive */
+    @media (max-width:900px){.panel{width:320px}}
+    @media (max-width:700px){body{flex-direction:column}main{flex-direction:column} .panel{order:2;width:100%;height:320px}}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <div class="logo">ID</div>
+      <div>
+        <h1>3D Interior Designer — Demo</h1>
+        <p class="muted">Interactive room mockup for showcasing interior ideas</p>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center">
+      <button class="btn" id="screenshot">📸 Snapshot</button>
+      <button class="btn secondary" id="reset">Reset</button>
+    </div>
+  </header>
+
+  <main>
+    <div id="canvas-wrap"></div>
+    <aside class="panel">
+      <h2>Room Controls</h2>
+
+      <div class="control">
+        <label>Wall Color</label>
+        <input type="color" id="wallColor" value="#f6f3ef" />
+      </div>
+
+      <div class="control">
+        <label>Floor Color</label>
+        <input type="color" id="floorColor" value="#cfc7b7" />
+      </div>
+
+      <div class="control">
+        <label>Add Furniture</label>
+        <div class="row">
+          <button class="btn small" id="addSofa">+ Sofa</button>
+          <button class="btn small" id="addTable">+ Table</button>
+          <button class="btn small" id="addLamp">+ Lamp</button>
+        </div>
+      </div>
+
+      <div class="control">
+        <label>Furniture Options</label>
+        <div class="row">
+          <select id="selectFurniture" style="flex:1;padding:10px;border-radius:8px;border:1px solid #e8eef9">
+            <option value="">-- select item --</option>
+          </select>
+          <input type="color" id="furnColor" value="#8c6dfc" />
+        </div>
+        <div style="margin-top:8px;display:flex;gap:8px">
+          <button class="btn small" id="bringFront">Bring Forward</button>
+          <button class="btn small" id="removeItem">Remove</button>
+        </div>
+      </div>
+
+      <div class="control">
+        <label>Lighting</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="range" id="lightIntensity" min="0" max="3" step="0.05" value="1" style="flex:1" />
+          <span id="lightVal" style="width:44px;text-align:right">1.00</span>
+        </div>
+      </div>
+
+      <div class="control">
+        <label>Camera</label>
+        <div style="display:flex;gap:8px">
+          <button class="btn small" id="frontCam">Front</button>
+          <button class="btn small" id="topCam">Top</button>
+          <button class="btn small" id="isoCam">Isometric</button>
+        </div>
+      </div>
+
+      <p style="color:#6b7a90;font-size:13px;margin-top:12px">Tip: drag to orbit, scroll to zoom. Click furniture to select it and use controls to modify.</p>
+    </aside>
+  </main>
+
+  <footer>Made with three.js — lightweight demo for portfolio use</footer>
+
+  <script src="https://unpkg.com/three@0.155.0/build/three.min.js"></script>
+  <script src="https://unpkg.com/three@0.155.0/examples/js/controls/OrbitControls.js"></script>
+  <script>
+    // Basic scene setup
+    const container = document.getElementById('canvas-wrap');
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xf7f9ff);
+
+    const camera = new THREE.PerspectiveCamera(50, container.clientWidth / container.clientHeight, 0.1, 2000);
+    camera.position.set(4, 3, 6);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(container.clientWidth, container.clientHeight);
+    renderer.shadowMap.enabled = true;
+    container.appendChild(renderer.domElement);
+
+    // Orbit controls
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.target.set(0,1,0);
+    controls.update();
+
+    // Room (floor + walls)
+    const room = new THREE.Group();
+    const floorGeo = new THREE.PlaneGeometry(12,8);
+    const floorMat = new THREE.MeshStandardMaterial({ color: 0xcfc7b7, roughness:0.8 });
+    const floor = new THREE.Mesh(floorGeo, floorMat);
+    floor.rotation.x = -Math.PI/2;
+    floor.receiveShadow = true;
+    room.add(floor);
+
+    const wallMat = new THREE.MeshStandardMaterial({ color: 0xf6f3ef, roughness:0.9 });
+    const backWall = new THREE.Mesh(new THREE.PlaneGeometry(12,5), wallMat);
+    backWall.position.set(0,2.5,-4);
+    room.add(backWall);
+
+    const leftWall = new THREE.Mesh(new THREE.PlaneGeometry(8,5), wallMat);
+    leftWall.position.set(-6,2.5,0);
+    leftWall.rotation.y = Math.PI/2;
+    room.add(leftWall);
+
+    // simple ceiling light (hemisphere + point)
+    const hemi = new THREE.HemisphereLight(0xffffff, 0x444444, 0.6);
+    scene.add(hemi);
+
+    const point = new THREE.PointLight(0xffffff, 1.0, 50);
+    point.position.set(0,4,0);
+    point.castShadow = true;
+    scene.add(point);
+
+    scene.add(room);
+
+    // helper grid
+    const grid = new THREE.GridHelper(12,12,0xdddddd,0xeeeeee);
+    grid.position.y=0.01;
+    scene.add(grid);
+
+    // furniture store
+    let furniture = [];
+    let selected = null;
+
+    function addSofa(){
+      const geo = new THREE.BoxGeometry(2.2,0.9,0.9);
+      const mat = new THREE.MeshStandardMaterial({ color: 0x8c6dfc, metalness:0.1, roughness:0.6 });
+      const sofa = new THREE.Mesh(geo, mat);
+      sofa.position.set(0,0.45,1.6);
+      sofa.castShadow = true; sofa.userData.type='sofa';
+      scene.add(sofa); furniture.push(sofa); addToSelect(sofa);
+    }
+
+    function addTable(){
+      const geo = new THREE.BoxGeometry(1.1,0.12,1.1);
+      const mat = new THREE.MeshStandardMaterial({ color: 0xd4b996, roughness:0.7 });
+      const top = new THREE.Mesh(geo, mat); top.position.set(1.4,0.35,0.5);
+      top.castShadow=true; top.userData.type='table';
+      const legGeo = new THREE.CylinderGeometry(0.06,0.06,0.6,12);
+      const leg = new THREE.Mesh(legGeo,new THREE.MeshStandardMaterial({color:0x6b4f3b}));
+      leg.position.set(1.4,0.05,0.5);
+      leg.castShadow=true; scene.add(top,leg); furniture.push(top,leg); addToSelect(top);
+    }
+
+    function addLamp(){
+      const base = new THREE.Mesh(new THREE.CylinderGeometry(0.06,0.06,0.25,12), new THREE.MeshStandardMaterial({color:0x333333}));
+      base.position.set(-1.6,0.125,0.8); base.castShadow=true; base.userData.type='lamp';
+      const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.12,16,12), new THREE.MeshStandardMaterial({color:0xfff1d6,emissive:0xffeaaa,emissiveIntensity:0.9}));
+      bulb.position.set(-1.6,0.5,0.8); bulb.castShadow=true;
+      scene.add(base,bulb); furniture.push(base,bulb); addToSelect(base);
+    }
+
+    function addToSelect(obj){
+      const sel = document.getElementById('selectFurniture');
+      const id = 'item-' + Math.random().toString(36).slice(2,9);
+      obj.name = id; // store name in object
+      const opt = document.createElement('option'); opt.value = id; opt.textContent = obj.userData.type || 'item';
+      sel.appendChild(opt);
+    }
+
+    // raycaster for click selection
+    const ray = new THREE.Raycaster(); const mouse = new THREE.Vector2();
+    function onClick(e){
+      const rect = renderer.domElement.getBoundingClientRect();
+      mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = - ((e.clientY - rect.top) / rect.height) * 2 + 1;
+      ray.setFromCamera(mouse, camera);
+      const hits = ray.intersectObjects(scene.children, true);
+      if(hits.length){
+        const hit = hits[0].object;
+        // find root furniture (by name with item-)
+        let root = hit;
+        while(root && !root.name.startsWith('item-')){
+          root = root.parent;
+        }
+        if(root && root.name){ selectItemByName(root.name); }
+      } else { selectItemByName(''); }
+    }
+    renderer.domElement.addEventListener('click', onClick);
+
+    function selectItemByName(name){
+      // clear previous highlight
+      if(selected){ selected.material.emissive && (selected.material.emissive.setHex(0x000000)); }
+      selected = null;
+      const sel = document.getElementById('selectFurniture');
+      sel.value = name || '';
+      if(!name) return;
+      const obj = scene.getObjectByName(name);
+      if(obj){ selected = obj; obj.material && (obj.material.emissive && obj.material.emissive.setHex(0x222222)); }
+    }
+
+    // UI bindings
+    document.getElementById('addSofa').addEventListener('click', addSofa);
+    document.getElementById('addTable').addEventListener('click', addTable);
+    document.getElementById('addLamp').addEventListener('click', addLamp);
+
+    document.getElementById('wallColor').addEventListener('input', (e)=>{
+      wallMat.color.set(e.target.value);
+    });
+    document.getElementById('floorColor').addEventListener('input', (e)=>{
+      floorMat.color.set(e.target.value);
+    });
+
+    document.getElementById('selectFurniture').addEventListener('change',(e)=>{
+      selectItemByName(e.target.value);
+    });
+    document.getElementById('furnColor').addEventListener('input',(e)=>{
+      if(selected && selected.material) selected.material.color.set(e.target.value);
+    });
+    document.getElementById('bringFront').addEventListener('click',()=>{
+      if(selected) selected.position.z -= 0.3;
+    });
+    document.getElementById('removeItem').addEventListener('click',()=>{
+      if(selected){
+        // remove options
+        const sel = document.getElementById('selectFurniture');
+        for(let i=0;i<sel.options.length;i++){ if(sel.options[i].value===selected.name) sel.remove(i);
+        }
+        scene.remove(selected); selected=null; sel.value='';
+      }
+    });
+
+    const lightIntensity = document.getElementById('lightIntensity');
+    const lightVal = document.getElementById('lightVal');
+    lightIntensity.addEventListener('input',(e)=>{ point.intensity = parseFloat(e.target.value); lightVal.textContent = parseFloat(e.target.value).toFixed(2);});
+
+    document.getElementById('frontCam').addEventListener('click',()=>{ gsTo({x:0,y:2.2,z:6}); });
+    document.getElementById('topCam').addEventListener('click',()=>{ gsTo({x:0,y:9,z:0.1}); });
+    document.getElementById('isoCam').addEventListener('click',()=>{ gsTo({x:5,y:4,z:5}); });
+
+    document.getElementById('screenshot').addEventListener('click',()=>{
+      const data = renderer.domElement.toDataURL('image/png');
+      const a = document.createElement('a'); a.href=data; a.download='room-snapshot.png'; a.click();
+    });
+
+    document.getElementById('reset').addEventListener('click',()=>{ // clear furniture
+      furniture.forEach(o=>scene.remove(o)); furniture=[]; selected=null; const sel = document.getElementById('selectFurniture'); sel.innerHTML='<option value="">-- select item --</option>'; wallMat.color.set('#f6f3ef'); floorMat.color.set('#cfc7b7'); point.intensity=1; lightIntensity.value=1; lightVal.textContent='1.00'; gsTo({x:4,y:3,z:6}); });
+
+    // simple tween for camera (small helper)
+    function gsTo(target){
+      const from = {x:camera.position.x,y:camera.position.y,z:camera.position.z};
+      const dur = 450; const start = performance.now();
+      function tick(t){
+        const p = Math.min(1,(t-start)/dur);
+        camera.position.x = from.x + (target.x-from.x)*ease(p);
+        camera.position.y = from.y + (target.y-from.y)*ease(p);
+        camera.position.z = from.z + (target.z-from.z)*ease(p);
+        controls.update(); if(p<1) requestAnimationFrame(tick);
+      }
+      requestAnimationFrame(tick);
+      function ease(x){return (--x)*x*x+1}
+    }
+
+    // responsiveness
+    window.addEventListener('resize', ()=>{
+      camera.aspect = container.clientWidth / container.clientHeight;
+      camera.updateProjectionMatrix(); renderer.setSize(container.clientWidth, container.clientHeight);
+    });
+
+    // animation loop
+    function animate(){ requestAnimationFrame(animate); renderer.render(scene,camera); }
+    animate();
+
+    // initial demo content
+    addSofa(); addTable(); addLamp();
+  </script>
+</body>
+</html>
